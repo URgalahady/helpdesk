@@ -16,8 +16,16 @@ class Ticket extends Model
         'category',
         'priority',
         'status',
+        'status_read_at',
         'attachment',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status_read_at' => 'datetime',
+        ];
+    }
 
     /**
      * Ticket belongs to a user.

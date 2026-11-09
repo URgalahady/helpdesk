@@ -118,6 +118,10 @@ class TicketController extends Controller
 
         $data = $validator->validated();
 
+        if (array_key_exists('status', $data) && $data['status'] !== $ticket->status) {
+            $data['status_read_at'] = null;
+        }
+
         if ($request->hasFile('attachment')) {
             $path = $request->file('attachment')->store('attachments');
             $data['attachment'] = $path;
@@ -138,6 +142,20 @@ class TicketController extends Controller
         }
         $ticket->delete();
         return redirect()->route('tickets.index')->with('success', 'Ticket deleted.');
+    }
+
+    /**
+     * Tandai notifikasi status pengaduan sudah dibaca oleh pemilik.
+     */
+    public function readNotification(Ticket $ticket)
+    {
+        if (Auth::id() !== $ticket->user_id) {
+            abort(403);
+        }
+
+        $ticket->update(['status_read_at' => now()]);
+
+        return back();
     }
 
     /**

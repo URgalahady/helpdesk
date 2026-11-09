@@ -17,6 +17,117 @@
             </div>
         @endif
 
+        {{-- Notifikasi status pengaduan (popup tengah, ringkas) --}}
+        @if(isset($statusNotifications) && $statusNotifications->count() > 0)
+            @php
+                $notifPayload = $statusNotifications->map(function ($notif) {
+                    $messages = [
+                        'accepted' => 'Pengaduan "'.$notif->title.'" telah diterima. Terima kasih atas laporannya.',
+                        'implemented' => 'Pengaduan "'.$notif->title.'" sedang ditindaklanjuti.',
+                        'closed' => 'Pengaduan "'.$notif->title.'" telah selesai direalisasikan. Terima kasih atas saran Anda.',
+                    ];
+                    $labels = ['accepted' => 'Diterima', 'implemented' => 'Diproses', 'closed' => 'Selesai'];
+                    return [
+                        'id' => $notif->id,
+                        'status' => $notif->status,
+                        'label' => $labels[$notif->status] ?? ucfirst($notif->status),
+                        'message' => $messages[$notif->status] ?? 'Status pengaduan "'.$notif->title.'" diperbarui.',
+                        'url' => route('tickets.notification.read', $notif),
+                    ];
+                })->values();
+            @endphp
+            <div x-data="{
+                    open: false,
+                    items: {{ Js::from($notifPayload) }},
+                    statusClass(s) {
+                        return {
+                            accepted: 'border-blue-200 bg-blue-50/80',
+                            implemented: 'border-purple-200 bg-purple-50/80',
+                            closed: 'border-emerald-200 bg-emerald-50/80',
+                        }[s] || 'border-slate-200 bg-slate-50';
+                    },
+                    badgeClass(s) {
+                        return {
+                            accepted: 'bg-blue-600',
+                            implemented: 'bg-purple-600',
+                            closed: 'bg-emerald-600',
+                        }[s] || 'bg-slate-600';
+                    },
+                    async dismiss(item, idx) {
+                        try {
+                            await fetch(item.url, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ _method: 'PATCH' })
+                            });
+                        } catch (e) {}
+                        this.items.splice(idx, 1);
+                        if (this.items.length === 0) this.open = false;
+                    }
+                 }"
+                 x-init="setTimeout(() => open = true, 80)"
+                 x-show="open && items.length"
+                 x-cloak
+                 class="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4">
+                <div x-show="open && items.length"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0"
+                     x-transition:enter-end="opacity-100"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="opacity-100"
+                     x-transition:leave-end="opacity-0"
+                     class="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]"
+                     @click="open = false"></div>
+
+                <div x-show="open && items.length"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0 translate-y-2 sm:scale-95"
+                     x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                     x-transition:leave-end="opacity-0 translate-y-2 sm:scale-95"
+                     class="relative w-full max-w-sm bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
+                    <div class="px-4 py-2.5 bg-gradient-to-r from-[#0284c7] to-[#1e40af] text-white flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="relative flex h-2 w-2 shrink-0">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="text-[13px] font-semibold leading-tight">Pembaruan Status</div>
+                                <div class="text-[10px] text-blue-100 leading-tight truncate" x-text="items.length + ' notifikasi baru'"></div>
+                            </div>
+                        </div>
+                        <button @click="open = false" class="shrink-0 text-white/80 hover:text-white text-lg leading-none font-bold px-1" aria-label="Tutup">&times;</button>
+                    </div>
+
+                    <div class="p-2.5 space-y-2 max-h-[50vh] overflow-y-auto">
+                        <template x-for="(item, idx) in items" :key="item.id + '-' + item.status">
+                            <div class="rounded-lg border px-3 py-2.5 transition-all" :class="statusClass(item.status)">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0 space-y-1">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-white uppercase tracking-wide" :class="badgeClass(item.status)" x-text="item.label"></span>
+                                        <p class="text-[12px] leading-snug text-slate-800 break-words" x-text="item.message"></p>
+                                    </div>
+                                    <button @click="dismiss(item, idx)" class="shrink-0 px-2 py-1 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-semibold">Tutup</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="px-3 py-2 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-500 flex items-center justify-between gap-2">
+                        <span class="leading-tight">Muncul lagi jika status berubah.</span>
+                        <button @click="open = false" class="shrink-0 font-semibold text-[#1b2569] hover:underline">Nanti</button>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         {{-- Hero Banner (Matches LMS STMIK Mardira Design) --}}
         <div class="rounded-2xl bg-gradient-to-r from-[#0284c7] via-[#0369a1] to-[#1e40af] text-white shadow-md p-6 sm:p-8">
             <div class="max-w-3xl space-y-4">
@@ -38,19 +149,19 @@
                     Pantau aktivitas akademik, tugas, forum, dan perkembangan kelas Anda dalam satu halaman.
                 </p>
 
-                {{-- 3 Horizontal Info Cards (NIM, Program Studi, Semester) --}}
+                {{-- 3 Horizontal Info Cards (NIM, Program Studi/Jurusan, Semester) --}}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                     <div class="bg-white/10 rounded-xl p-3 border border-white/15">
                         <div class="text-[10px] text-blue-200 uppercase font-semibold">NIM</div>
-                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">24110{{ str_pad(Auth::user()->id, 3, '0', STR_PAD_LEFT) }}</div>
+                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">{{ Auth::user()->nim ?: 'Belum diatur admin' }}</div>
                     </div>
                     <div class="bg-white/10 rounded-xl p-3 border border-white/15">
                         <div class="text-[10px] text-blue-200 uppercase font-semibold">Program Studi</div>
-                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">Teknik Informatika</div>
+                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">{{ Auth::user()->program_studi ?: (Auth::user()->jurusan ?: 'Belum diatur admin') }}</div>
                     </div>
                     <div class="bg-white/10 rounded-xl p-3 border border-white/15">
                         <div class="text-[10px] text-blue-200 uppercase font-semibold">Semester</div>
-                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">5</div>
+                        <div class="text-sm sm:text-base font-bold text-white mt-0.5">{{ Auth::user()->semester ?: 'Belum diatur admin' }}</div>
                     </div>
                 </div>
 
